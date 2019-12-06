@@ -1,14 +1,13 @@
-from keras import backend as K
 from keras.models import Model
 from keras.layers import Conv3D, Conv3DTranspose, MaxPooling3D, Add, BatchNormalization, Input, Activation, Lambda, UpSampling3D, Concatenate
 from keras import initializers
 
 
-def unet(filter_root, layers, n_class=2, input_size=(10, 256, 256, 1), activation='relu', batch_norm=True, final_activation='softmax'):
+def res_unet(filter_root, layers, n_class=2, input_size=(10, 256, 256, 1), activation='relu', batch_norm=True, final_activation='softmax'):
     inputs = Input(input_size)
     x = inputs
     # Dictionary for long connections
-    var_dict = {}
+    long_connection_store = {}
     # Dictionary for deep supervision
     outputs = []
     # Down sampling
@@ -37,7 +36,7 @@ def unet(filter_root, layers, n_class=2, input_size=(10, 256, 256, 1), activatio
 
         # Max pooling
         if i < layers - 1:
-            var_dict[str(i)] = act2
+            long_connection_store[str(i)] = act2
             x = MaxPooling3D(padding='same', name="MaxPooling{}_1".format(i))(act2)
         else:
             x = act2
@@ -50,7 +49,7 @@ def unet(filter_root, layers, n_class=2, input_size=(10, 256, 256, 1), activatio
         print("out_channel upsampling: {}".format(out_channel))
 
         # long connection from down sampling path.
-        long_connection = var_dict[str(i)]
+        long_connection = long_connection_store[str(i)]
         print("long_connection: {}".format(long_connection))
 
         up1 = UpSampling3D(name="UpSampling{}_1".format(i))(x)
@@ -83,18 +82,3 @@ def unet(filter_root, layers, n_class=2, input_size=(10, 256, 256, 1), activatio
     outputs.append(output)
     return Model(inputs, outputs=outputs, name='U-ResNet')
 
-
-def CroppingLayer(inputs):
-    ref = inputs[1]
-    inputs = inputs[0]
-    zeros = K.cast(K.zeros((3,)), dtype='int32')
-    pad_begin = K.maximum(
-        (K.shape(inputs)[1:-1] - K.shape(ref)[1:-1])//2, zeros)
-    print("pad_begin: {}".format(pad_begin))
-    pad_end = K.minimum(pad_begin + K.shape(ref)[1:-1], K.shape(inputs)[1:-1])
-    print("pad_end: {}\n".format(pad_end))
-
-    output = inputs[:, pad_begin[0]:pad_end[0], pad_begin[1]:pad_end[1],
-                    pad_begin[2]:pad_end[2], :]
-    print("output: {}\n".format(output))
-    return output
