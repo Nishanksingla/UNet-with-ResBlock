@@ -4,7 +4,23 @@ from keras.models import Model
 from keras.layers import Conv2D, Conv3D, MaxPooling2D, MaxPooling3D, UpSampling2D, UpSampling3D, Add, BatchNormalization, Input, Activation, Lambda, Concatenate
 
 
-def res_unet(filter_root, layers, n_class=2, input_size=(256, 256, 1), activation='relu', batch_norm=True, final_activation='softmax'):
+def res_unet(filter_root, depth, n_class=2, input_size=(256, 256, 1), activation='relu', batch_norm=True, final_activation='softmax'):
+    """
+    Build UNet model with ResBlock.
+
+    Args:
+        filter_root (int): Number of filters to start with in first convolution.
+        depth (int): How deep to go in UNet i.e. how many down and up sampling you want to do in the model. 
+                    Filter root and image size should be multiple of 2^depth.
+        n_class (int, optional): How many classes in the output layer. Defaults to 2.
+        input_size (tuple, optional): Input image size. Defaults to (256, 256, 1).
+        activation (str, optional): activation to use in each convolution. Defaults to 'relu'.
+        batch_norm (bool, optional): To use Batch normaliztion or not. Defaults to True.
+        final_activation (str, optional): activation for output layer. Defaults to 'softmax'.
+
+    Returns:
+        obj: keras model object
+    """
     inputs = Input(input_size)
     x = inputs
     # Dictionary for long connections
@@ -20,9 +36,8 @@ def res_unet(filter_root, layers, n_class=2, input_size=(256, 256, 1), activatio
         UpSampling = UpSampling3D
 
     # Down sampling
-    for i in range(layers):
+    for i in range(depth):
         out_channel = 2**i * filter_root
-        print("out_channel downsampling: {}".format(out_channel))
 
         # Residual/Skip connection
         res = Conv(out_channel, kernel_size=1, padding='same', use_bias=False, name="Identity{}_1".format(i))(x)
@@ -43,27 +58,21 @@ def res_unet(filter_root, layers, n_class=2, input_size=(256, 256, 1), activatio
         act2 = Activation(activation, name="Act{}_2".format(i))(resconnection)
 
         # Max pooling
-        if i < layers - 1:
+        if i < depth - 1:
             long_connection_store[str(i)] = act2
             x = MaxPooling(padding='same', name="MaxPooling{}_1".format(i))(act2)
         else:
             x = act2
-        print(x)
-    print("\n")
-    # Upsampling
-    for i in range(layers - 2, -1, -1):
-        print("i upsampling: {}".format(i))
 
+    # Upsampling
+    for i in range(depth - 2, -1, -1):
         out_channel = 2**(i) * filter_root
-        print("out_channel upsampling: {}".format(out_channel))
 
         # long connection from down sampling path.
         long_connection = long_connection_store[str(i)]
-        print("long_connection: {}".format(long_connection))
 
         up1 = UpSampling(name="UpSampling{}_1".format(i))(x)
         up_conv1 = Conv(out_channel, 2, activation='relu', padding='same', name="upConv{}_1".format(i))(up1)
-        print("up_conv1: {}".format(up_conv1))
 
         #  Concatenate.
         up_conc = Concatenate(axis=-1, name="upConcatenate{}_1".format(i))([up_conv1, long_connection])
